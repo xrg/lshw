@@ -17,7 +17,7 @@ __ID("@(#) $Id$");
 
 #define PROC_BUS_PCI "/proc/bus/pci"
 #define SYS_BUS_PCI "/sys/bus/pci"
-#define PCIID_PATH "/usr/share/lshw/pci.ids:/usr/local/share/pci.ids:/usr/share/pci.ids:/etc/pci.ids:/usr/share/hwdata/pci.ids:/usr/share/misc/pci.ids"
+#define PCIID_PATH DATADIR"/pci.ids:/usr/share/lshw/pci.ids:/usr/local/share/pci.ids:/usr/share/pci.ids:/etc/pci.ids:/usr/share/hwdata/pci.ids:/usr/share/misc/pci.ids"
 
 #define PCI_CLASS_REVISION      0x08              /* High 24 bits are class, low 8 revision */
 #define PCI_VENDOR_ID           0x00    /* 16 bits */
@@ -519,10 +519,7 @@ static bool load_pcidb()
       parse_pcidb(lines);
   }
 
-  if (lines.size() == 0)
-    return false;
-
-  return true;
+  return (pci_devices.size() > 0);
 }
 
 
@@ -1157,7 +1154,7 @@ bool scan_pci(hwNode & n)
             {
               while(!feof(resource))
               {
-                uint64_t start, end, flags;
+                unsigned long long start, end, flags;
 
                 start = end = flags = 0;
 

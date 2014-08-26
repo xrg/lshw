@@ -431,9 +431,7 @@ string escape(const string & s)
     if (s[i] == 0x9
         || s[i] == 0xA
         || s[i] == 0xD
-        || (s[i] >= 0x20 && s[i] <= 0xD7FF)
-        || (s[i] >= 0xE000 && s[i] <= 0xFFFD)
-        || (s[i] >= 0x10000 && s[i] <= 0x10FFFF))
+        || s[i] >= 0x20)
       switch (s[i])
       {
         case '<':
@@ -583,7 +581,7 @@ int open_dev(dev_t dev, const string & name)
       snprintf(fn, sizeof(fn), "%s/lshw-%d", *p, getpid());
     else
       snprintf(fn, sizeof(fn), "%s", name.c_str());
-    if ((mknod(fn, (S_IFCHR | S_IREAD), dev) == 0) || (errno = EEXIST))
+    if ((mknod(fn, (S_IFCHR | S_IREAD), dev) == 0) || (errno == EEXIST))
     {
       fd = open(fn, O_RDONLY);
       if(name=="") unlink(fn);
@@ -626,10 +624,10 @@ string utf8(wchar_t c)
   return result;
 }
 
-string utf8(uint16_t * s, size_t length, bool forcelittleendian)
+string utf8(uint16_t * s, ssize_t length, bool forcelittleendian)
 {
   string result = "";
-  size_t i;
+  ssize_t i;
 
   for(i=0; (length<0) || (i<length); i++)
     if(s[i])
@@ -643,7 +641,7 @@ string utf8(uint16_t * s, size_t length, bool forcelittleendian)
 // U+FFFD replacement character
 #define REPLACEMENT  "\357\277\275"
 
-string utf8_sanitize(const string & s)
+string utf8_sanitize(const string & s, bool autotruncate)
 {
   unsigned int i = 0;
   unsigned int remaining = 0;
@@ -666,6 +664,7 @@ string utf8_sanitize(const string & s)
         }
         else		// invalid sequence (truncated)
         {
+          if(autotruncate) return result;
           emit = REPLACEMENT;
           emit += s[i];
           remaining = 0;
@@ -697,7 +696,10 @@ string utf8_sanitize(const string & s)
           emit = s[i];
         }
         else
+        {
+          if(autotruncate) return result;
           emit = REPLACEMENT;	// invalid character
+        }
 
         break;
     }

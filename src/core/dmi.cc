@@ -118,6 +118,15 @@ static const char *dmi_hardware_security_status(u8 code)
   return status[code & 0x03];
 }
 
+static int checksum(const u8 *buf, size_t len)
+{
+  u8 sum = 0;
+  size_t a;
+
+  for (a = 0; a < len; a++)
+    sum += buf[a];
+  return (sum == 0);
+}
 
 static string dmi_battery_voltage(u16 code)
 {
@@ -380,6 +389,10 @@ hwNode & bios)
   if (data[1] & (1 << 1))                         // function-key initiated network service boot
     bios.addCapability("netboot",
       _("Function-key initiated network service boot"));
+  if (data[1] & (1 << 3))
+    bios.addCapability("uefi", _("UEFI specification is supported"));
+  if (data[1] & (1 << 4))
+    bios.addCapability("virtualmachine", _("This machine is a virtual machine"));
 }
 
 
@@ -621,10 +634,14 @@ void dmi_chassis(u8 code, hwNode & n)
     "raid", N_("RAID Chassis"), "md",
     "rackmount", N_("Rack Mount Chassis"), "rackmount",
     "sealed", N_("Sealed-case PC"), NULL,
-    "multi-system", N_("Multi-system"), "cluster"     /* 0x19 */
+    "multi-system", N_("Multi-system"), "cluster",     /* 0x19 */
+    "pci", N_("Compact PCI"), NULL,
+    "tca", N_("Advanced TCA"), NULL,
+    "blade", N_("Blade"), NULL,		/* 0x1C */
+    "enclosure", N_("Blade enclosure"), NULL,		/* 0x1D */
   };
 
-  if(code <= 0x19)
+  if(code <= 0x1D)
   {
     if(n.getDescription()=="") n.setDescription(_(chassis_type[1+3*code]));
 
@@ -660,8 +677,8 @@ static const char *dmi_processor_family(u8 code)
     "Pentium III",
     "M1",
     "M2",
-    "",                                           /* 0x14 */
-    "",
+    "Celeron M",                                           /* 0x14 */
+    "Pentium 4 HT",
     "",
     "",
     "Duron",
@@ -680,10 +697,10 @@ static const char *dmi_processor_family(u8 code)
     "Power PC 620",
     "Power PC x704",
     "Power PC 750",
-    "",                                           /* 0x28 */
-    "",
-    "",
-    "",
+    "Core Duo",                                           /* 0x28 */
+    "Core Duo mobile",
+    "Core Solo mobile",
+    "Atom",
     "",
     "",
     "",
@@ -762,7 +779,7 @@ static const char *dmi_processor_family(u8 code)
     "",                                           /* 0x77 */
     "Crusoe TM5000",
     "Crusoe TM3000",
-    "",                                           /* 0x7A */
+    "Efficeon TM8000",                                           /* 0x7A */
     "",
     "",
     "",
@@ -773,17 +790,17 @@ static const char *dmi_processor_family(u8 code)
     "Itanium",
     "Athlon 64",
     "Opteron",
-    "",                                           /* 0x85 */
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",                                           /* 0x8F */
+    "Sempron",                                           /* 0x85 */
+    "Turion 64 Mobile",
+    "Dual-Core Opteron",
+    "Athlon 64 X2 Dual-Core",
+    "Turion 64 X2 Mobile",
+    "Quad-Core Opteron",
+    "3rd-generation Opteron",
+    "Phenom FX Quad-Core",
+    "Phenom X4 Quad-Core",
+    "Phenom X2 Dual-Core",
+    "Athlon X2 Dual-Core",                                           /* 0x8F */
     "PA-RISC",
     "PA-RISC 8500",
     "PA-RISC 8000",
@@ -826,60 +843,60 @@ static const char *dmi_processor_family(u8 code)
     "Athlon MP",
     "Itanium 2",
     "Pentium M",
-    "",                                           /* 0xBA */
+    "Celeron D",                                           /* 0xBA */
+    "Pentium D",
+    "Pentium Extreme Edition",
+    "Core Solo",
     "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",                                           /* 0xC7 */
+    "Core 2 Duo",
+    "Core 2 Solo",
+    "Core 2 Extreme",
+    "Core 2 Quad",
+    "Core 2 Extreme mobile",
+    "Core 2 Duo mobile",
+    "Core 2 Solo mobile",
+    "Core i7",
+    "Dual-Core Celeron",                                           /* 0xC7 */
     "IBM390",
     "G4",
     "G5",
-    "",                                           /* 0xCB */
+    "ESA/390 G6",                                           /* 0xCB */
+    "z/Architectur base",
+    "Core i5",
+    "Core i3",
+    "",
+    "",
+    "",
+    "VIA C7-M",
+    "VIA C7-D",
+    "VIA C7",
+    "VIA Eden",
+    "Multi-Core Xeon",
+    "Dual-Core Xeon 3xxx",
+    "Quad-Core Xeon 3xxx",
+    "VIA Nano",
+    "Dual-Core Xeon 5xxx",
+    "Quad-Core Xeon 5xxx",	/* 0xDB */
+    "",
+    "Dual-Core Xeon 7xxx",
+    "Quad-Core Xeon 7xxx",
+    "Multi-Core Xeon 7xxx",
+    "Multi-Core Xeon 3400",
     "",
     "",
     "",
     "",
     "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
+    "Embedded Opteron Quad-Core",
+    "Phenom Triple-Core",
+    "Turion Ultra Dual-Core Mobile",
+    "Turion Dual-Core Mobile",
+    "Athlon Dual-Core",
+    "Sempron SI",
+    "Phenom II",
+    "Athlon II",
+    "Six-Core Opteron",
+    "Sempron M",
     "",
     "",
     "",
@@ -899,11 +916,9 @@ static const char *dmi_processor_family(u8 code)
 /* master.mif has values beyond that, but they can't be used for DMI */
   };
 
-  if (code == 0xFF)
+  if (code >= 0xFF)
     return "";
 
-  if (code > 0x24)
-    return "";
   return processor_family[code];
 }
 
@@ -1024,7 +1039,8 @@ int dmiversionmin)
         if (dm->length >= 0x1B)
         {
           node.setConfig("sku", dmi_string(dm, data[0x19]));
-	  node.setProduct(node.getProduct() + " (" + dmi_string(dm, data[0x19]) + ")");
+	  if (dmi_string(dm, data[0x19]) != "")
+	    node.setProduct(node.getProduct() + " (" + dmi_string(dm, data[0x19]) + ")");
           node.setConfig("family", dmi_string(dm, data[0x1A]));
         }
         break;
@@ -1736,8 +1752,8 @@ bool scan_dmi(hwNode & n)
   u16 dmimaj = 0, dmimin = 0;
   currentcpu = 0;
 
-#ifdef __hppa__
-  return false;		// SMBIOS not supported on PA-RISC machines
+#if defined(__arm__) || defined (__hppa__) 
+  return false;		// SMBIOS not supported on PA-RISC and ARM machines
 #endif
 
   if (sizeof(u8) != 1 || sizeof(u16) != 2 || sizeof(u32) != 4)
@@ -1753,7 +1769,7 @@ bool scan_dmi(hwNode & n)
   }
 
   fp -= 16;
-  while (efi || (fp < 0xFFFFF))
+  while (efi || (fp < 0xFFFE0))
   {
     fp += 16;
     mmoffset = fp % getpagesize();
@@ -1775,7 +1791,7 @@ bool scan_dmi(hwNode & n)
       smmajver = buf[6];
       smminver = buf[7];
     }
-    else if (memcmp(buf, "_DMI_", 5) == 0)
+    else if (smmajver && (memcmp(buf, "_DMI_", 5) == 0) && checksum(buf, 0x0F))
     {
       u16 num = buf[13] << 8 | buf[12];
       u16 len = buf[7] << 8 | buf[6];

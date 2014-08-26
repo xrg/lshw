@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include <gtk/gtk.h>
 
-#include "interface.h"
 #include "support.h"
 #include "config.h"
 #include "stock.h"
@@ -10,19 +9,17 @@
 
 static char *id = "@(#) $Id$";
 
-GtkWidget *mainwindow;
+extern GtkWidget *mainwindow;
 
 int
 main (int argc, char *argv[])
 {
-  GdkPixbuf *icon;
 #ifndef NONLS
   bindtextdomain (PACKAGE, LOCALEDIR);
   bind_textdomain_codeset (PACKAGE, "UTF-8");
   textdomain (PACKAGE);
 #endif
 
-  gtk_set_locale ();
   gtk_init (&argc, &argv);
 
   if(geteuid() != 0)
@@ -46,26 +43,12 @@ main (int argc, char *argv[])
   }
 
   lshw_gtk_stock_init();
+  lshw_ui_init();
 
-/*
- * The following code was added by Glade to create one of each component
- * (except popup menus), just so that you see something after building
- * the project. Delete any components that you don't want shown initially.
- */
-  mainwindow = create_lshw ();
+  if(!mainwindow)
+    return(1);
 
-  icon = gtk_widget_render_icon(GTK_WIDGET(mainwindow),
-    "lshw-logo",
-    GTK_ICON_SIZE_DIALOG,
-    NULL);
-  if(GDK_IS_PIXBUF(icon))
-  {
-    gtk_window_set_icon(GTK_WINDOW(mainwindow), icon);
-    gtk_window_set_default_icon(icon);
-  }
-
-  gtk_widget_show (mainwindow);
-
+  gtk_widget_show(mainwindow);
   gtk_main ();
 
   (void) &id;                                     // avoid warning "id defined but not used"

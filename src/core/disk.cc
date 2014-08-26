@@ -25,12 +25,16 @@ __ID("@(#) $Id$");
 #ifndef BLKSSZGET
 #define BLKSSZGET  _IO(0x12,104)                  /* get block device sector size */
 #endif
+#ifndef BLKPBSZGET
+#define BLKPBSZGET _IO(0x12,123)
+#endif
 
 bool scan_disk(hwNode & n)
 {
   long size = 0;
   unsigned long long bytes = 0;
   int sectsize = 0;
+  int physsectsize = 0;
 
   if (n.getLogicalName() == "")
     return false;
@@ -39,6 +43,16 @@ bool scan_disk(hwNode & n)
 
   if (fd < 0)
     return false;
+
+  if (ioctl(fd, BLKPBSZGET, &physsectsize) != 0)
+    physsectsize = 0;
+  if(physsectsize)
+    n.setConfig("sectorsize", physsectsize);
+
+  if (ioctl(fd, BLKSSZGET, &sectsize) < 0)
+    sectsize = 0;
+  if (sectsize)
+    n.setConfig("logicalsectorsize", sectsize);
 
   if (n.getSize() == 0)
   {
@@ -50,11 +64,10 @@ bool scan_disk(hwNode & n)
     {
       if (ioctl(fd, BLKGETSIZE, &size) != 0)
         size = 0;
-      if (ioctl(fd, BLKSSZGET, &sectsize) != 0)
-        sectsize = 0;
-
-      if ((size > 0) && (sectsize > 0))
+      
+      if ((size > 0) && (sectsize > 0)){
         n.setSize((unsigned long long) size * (unsigned long long) sectsize);
+      }
     }
   }
 

@@ -9,11 +9,13 @@
  *
  */
 
+#include <errno.h>
 #include "version.h"
 #include "device-tree.h"
 #include "osutils.h"
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <endian.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -23,7 +25,7 @@
 
 __ID("@(#) $Id$");
 
-#define DIMMINFOSIZE 0x80
+#define DIMMINFOSIZE 0x100
 typedef __uint8_t dimminfo_buf[DIMMINFOSIZE];
 
 struct dimminfo
@@ -48,7 +50,10 @@ static unsigned long get_long(const string & path)
     close(fd);
   }
 
-  return result;
+  if(sizeof(result) == sizeof(uint64_t))
+    return be64toh(result);
+  else
+    return be32toh(result);
 }
 
 
@@ -193,7 +198,8 @@ static void scan_devtree_cpu(hwNode & core)
       struct dirent **cachelist;
       int ncache;
 
-      if (hw::strip(get_string(basepath + "/device_type")) != "cpu")
+      if (exists(basepath + "/device_type") &&
+        hw::strip(get_string(basepath + "/device_type")) != "cpu")
         break;                                    // oops, not a CPU!
 
       cpu.setProduct(get_string(basepath + "/name"));
@@ -228,6 +234,7 @@ static void scan_devtree_cpu(hwNode & core)
         hwNode cache("cache",
           hw::memory);
 
+        cache.claim();
         cache.setDescription("L1 Cache");
         cache.setSize(get_long(basepath + "/d-cache-size"));
         if (cache.getSize() > 0)
@@ -249,6 +256,7 @@ static void scan_devtree_cpu(hwNode & core)
             hw::strip(get_string(cachebase + "/device_type")) != "l2-cache")
             break;                                // oops, not a cache!
 
+          cache.claim();
           cache.setDescription("L2 Cache");
           cache.setSize(get_long(cachebase + "/d-cache-size"));
           cache.setClock(get_long(cachebase + "/clock-frequency"));
@@ -280,6 +288,49 @@ static void scan_devtree_cpu(hwNode & core)
     }
     free(namelist);
   }
+}
+
+static void scan_devtree_memory_powernv(hwNode & core)
+{
+  struct dirent **namelist;
+  hwNode *memory = core.getChild("memory");
+  int n;
+
+  pushd(DEVICETREE "/vpd");
+  n = scandir(".", &namelist, selectdir, alphasort);
+  popd();
+  if (n < 0)
+    return;
+  for (int i = 0; i < n; i++)
+  {
+    string basepath;
+    unsigned long size = 0;
+    string sizestr;
+
+    if (strncmp(namelist[i]->d_name, "ms-dimm@", 8) == 0)
+    {
+      hwNode bank("bank", hw::memory);
+
+      if (!memory)
+        memory = core.addChild(hwNode("memory", hw::memory));
+
+      basepath = string(DEVICETREE "/vpd/") + string(namelist[i]->d_name);
+      bank.setSerial(get_string(basepath + string("/serial-number")));
+      bank.setProduct(get_string(basepath + string("/part-number")) + " FRU#" + get_string(basepath + string("/fru-number")));
+      bank.setDescription(get_string(basepath + string("/description")));
+      bank.setSlot(get_string(basepath + string("/ibm,loc-code")));
+      sizestr = get_string(basepath + string("/size"));
+      errno = 0;
+      size = strtoul(sizestr.c_str(), NULL, 10);
+      if (!errno)
+        bank.setSize(size*1024*1024);
+      bank.addHint("icon", string("memory"));
+
+      memory->addChild(bank);
+    }
+    free(namelist[i]);
+  }
+  free(namelist);
 }
 
 
@@ -335,8 +386,8 @@ static void scan_devtree_memory(hwNode & core)
       {
         for (unsigned int i = 0; i < slotnames.size(); i++)
         {
-          unsigned long base = 0;
-          unsigned long size = 0;
+          uint64_t base = 0;
+          uint64_t size = 0;
           hwNode bank("bank",
             hw::memory);
 
@@ -348,21 +399,91 @@ static void scan_devtree_memory(hwNode & core)
           else
             base = 0;
 
+          base = be64toh(base);
+          size = be64toh(size);
+
           if (fd >= 0)
           {
             dimminfo_buf dimminfo;
-
-            if (read(fd, &dimminfo, sizeof(dimminfo)) > 0)
+	    
+            if (read(fd, &dimminfo, 0x80) == 0x80)
             {
+
+              /* Read entire SPD eeprom */
+              if (dimminfo[2] >= 9) /* DDR3 */
+              {
+                read(fd, &dimminfo[0x80], (64 << ((dimminfo[0] & 0x70) >> 4)));
+              } else if (dimminfo[0] < 15) { /* DDR 2 */
+                read(fd, &dimminfo[0x80], (1 << (dimminfo[1]) ));
+              }
+
               if (size > 0)
               {
                 char dimmversion[20];
+                unsigned char mfg_loc_offset;
+                unsigned char rev_offset1;
+                unsigned char rev_offset2;
+                unsigned char year_offset;
+                unsigned char week_offset;
+                unsigned char partno_offset;
+                unsigned char ver_offset;
+
+                if (dimminfo[2] >= 9) {
+                  mfg_loc_offset = 0x77;
+                  rev_offset1 = 0x92;
+                  rev_offset2 = 0x93;
+                  year_offset = 0x78;
+                  week_offset = 0x79;
+                  partno_offset = 0x80;
+                  ver_offset = 0x01;
+
+                  switch ((dimminfo[0x8] >> 3) & 0x3) // DDR3 error detection and correction scheme
+                  {
+                    case 0x00:
+                      bank.setConfig("errordetection", "none");
+                      break;
+                    case 0x01:
+                      bank.addCapability("ecc");
+                      bank.setConfig("errordetection", "ecc");
+                      break;
+                  }
+                } else {
+                  mfg_loc_offset = 0x48;
+                  rev_offset1 = 0x5b;
+                  rev_offset2 = 0x5c;
+                  year_offset = 0x5d;
+                  week_offset = 0x5e;
+                  partno_offset = 0x49;
+                  ver_offset = 0x3e;
+
+                  switch (dimminfo[0xb] & 0x3) // DDR2 error detection and correction scheme
+                  {
+                    case 0x00:
+                      bank.setConfig("errordetection", "none");
+                      break;
+                    case 0x01:
+                      bank.addCapability("parity");
+                      bank.setConfig("errordetection", "parity");
+                      break;
+                    case 0x02:
+                    case 0x03:
+                      bank.addCapability("ecc");
+                      bank.setConfig("errordetection", "ecc");
+                      break;
+                  }
+                }
                 snprintf(dimmversion, sizeof(dimmversion),
-                  "%02X%02X,%02X %02X,%02X", dimminfo[0x5b],
-                  dimminfo[0x5c], dimminfo[0x5d], dimminfo[0x5e],
-                  dimminfo[0x48]);
-                bank.setSerial(string((char *) &dimminfo + 0x49, 18));
+                  "%02X%02X,%02X %02X,%02X", dimminfo[rev_offset1],
+                  dimminfo[rev_offset2], dimminfo[year_offset], dimminfo[week_offset],
+                  dimminfo[mfg_loc_offset]);
+                bank.setSerial(string((char *) &dimminfo[partno_offset], 18));
                 bank.setVersion(dimmversion);
+
+                int version = dimminfo[ver_offset];
+                char buff[32];
+
+                snprintf(buff, sizeof(buff), "spd-%d.%d", (version & 0xF0) >> 4, version & 0x0F);
+                bank.addCapability(buff);
               }
             }
           }
@@ -520,26 +641,40 @@ bool scan_device_tree(hwNode & n)
     core = n.getChild("core");
   }
 
-  n.setProduct(get_string(DEVICETREE "/model"));
+  n.setProduct(get_string(DEVICETREE "/model", n.getProduct()));
   n.addHint("icon", string("motherboard"));
 
-  n.setSerial(get_string(DEVICETREE "/serial-number"));
+  n.setSerial(get_string(DEVICETREE "/serial-number", n.getSerial()));
   if (n.getSerial() == "")
     n.setSerial(get_string(DEVICETREE "/system-id"));
   fix_serial_number(n);
 
-  n.setVendor(get_string(DEVICETREE "/copyright"));
-
-  get_apple_model(n);
-
-  if (core)
+  if (matches(get_string(DEVICETREE "/compatible"), "^ibm,powernv"))
   {
-    core->addHint("icon", string("board"));
-    scan_devtree_root(*core);
-    scan_devtree_bootrom(*core);
-    scan_devtree_memory(*core);
-    scan_devtree_cpu(*core);
-    core->addCapability(get_string(DEVICETREE "/compatible"));
+    n.setVendor(get_string(DEVICETREE "/vendor", "IBM"));
+    n.setProduct(get_string(DEVICETREE "/model-name"));
+    if (core)
+    {
+      core->addHint("icon", string("board"));
+      scan_devtree_root(*core);
+      scan_devtree_memory_powernv(*core);
+      scan_devtree_cpu(*core);
+      n.addCapability("powernv", "Non-virtualized");
+      n.addCapability("opal", "OPAL firmware");
+    }
+  }
+  else
+  {
+    n.setVendor(get_string(DEVICETREE "/copyright", n.getVendor()));
+    get_apple_model(n);
+    if (core)
+    {
+      core->addHint("icon", string("board"));
+      scan_devtree_root(*core);
+      scan_devtree_bootrom(*core);
+      scan_devtree_memory(*core);
+      scan_devtree_cpu(*core);
+    }
   }
 
   return true;

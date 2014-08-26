@@ -177,14 +177,26 @@ bool load_interfaces(vector < string > &interfaces)
   return true;
 }
 
+static int maclen(unsigned family = ARPHRD_ETHER)
+{
+  switch(family)
+  {
+    case ARPHRD_INFINIBAND:
+      return 20;
+    case ARPHRD_ETHER:
+      return 6;
+    default:
+      return 14;
+  }
+}
 
-static string getmac(const unsigned char *mac)
+static string getmac(const unsigned char *mac, unsigned family = ARPHRD_ETHER)
 {
   char buff[5];
   string result = "";
   bool valid = false;
 
-  for (int i = 0; i < 6; i++)
+  for (int i = 0; i < maclen(family); i++)
   {
     snprintf(buff, sizeof(buff), "%02x", mac[i]);
 
@@ -305,7 +317,7 @@ bool scan_network(hwNode & n)
 
   int fd = socket(PF_INET, SOCK_DGRAM, 0);
 
-  if (fd > 0)
+  if (fd >= 0)
   {
     struct ifreq ifr;
     struct ethtool_drvinfo drvinfo;
@@ -366,7 +378,7 @@ bool scan_network(hwNode & n)
 // get MAC address
       if (ioctl(fd, SIOCGIFHWADDR, &ifr) == 0)
       {
-        string hwaddr = getmac((unsigned char *) ifr.ifr_hwaddr.sa_data);
+        string hwaddr = getmac((unsigned char *) ifr.ifr_hwaddr.sa_data, ifr.ifr_hwaddr.sa_family);
         interface.addCapability(hwname(ifr.ifr_hwaddr.sa_family));
         if (ifr.ifr_hwaddr.sa_family >= 256)
           interface.addCapability("logical", _("Logical interface"));
@@ -463,6 +475,10 @@ bool scan_network(hwNode & n)
           case SPEED_1000:
             interface.setConfig("speed", "1Gbit/s");
             interface.setSize(1000000000L);
+            break;
+          case SPEED_10000:
+            interface.setConfig("speed", "10Gbit/s");
+            interface.setSize(10000000000L);
             break;
         }
         switch(ecmd.duplex)

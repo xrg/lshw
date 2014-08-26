@@ -66,9 +66,58 @@ string value)
       cpu->setVersion(value);
     if (id == "cpu")
       cpu->setProduct(value);
+    if (id == "clock")
+    {
+      double frequency = 0.0;
+
+      frequency = atof(value.c_str());
+      cpu->setSize((unsigned long long) (frequency * 1E6));
+    }
   }
 }
 #endif
+
+#ifdef __s390x__
+
+static void cpuinfo_s390(hwNode & node,
+string id,
+string value)
+{
+  if (id.substr(0, string("processor").size())=="processor")
+    currentcpu++;
+
+  hwNode *cpu = getcpu(node, currentcpu);
+
+  if (cpu)
+  {
+    cpu->addHint("logo", string("s390"));
+    cpu->claim(true);
+    if (id == "vendor_id")
+    {
+      if (value == "IBM/S390")
+        value = "IBM";
+      cpu->setVendor(value);
+    }
+
+    if (id == "features")
+      while (value.length() > 0)
+    {
+      size_t pos = value.find(' ');
+      string capability = (pos==string::npos)?value:value.substr(0, pos);
+
+      cpu->addCapability(capability);
+
+      if (pos == string::npos)
+        value = "";
+      else
+        value = hw::strip(value.substr(pos));
+    }
+
+    /* TODO: description for the capabilities*/
+  }
+}
+#endif
+
 
 #ifdef __ia64__
 static void cpuinfo_ia64(hwNode & node,
@@ -263,7 +312,7 @@ string value)
       cpu->setVendor(value);
     }
     if (id == "model name")
-      cpu->setProduct(value);
+      if(cpu->getProduct() == "") cpu->setProduct(value);
 //if ((id == "cpu MHz") && (cpu->getSize() == 0))
 //{
 //cpu->setSize((long long) (1000000L * atof(value.c_str())));
@@ -415,6 +464,9 @@ bool scan_cpuinfo(hwNode & n)
 #endif
 #ifdef __powerpc__
         cpuinfo_ppc(n, id, value);
+#endif
+#ifdef __s390x__
+        cpuinfo_s390(n, id, value);
 #endif
 #ifdef __hppa__
         cpuinfo_hppa(n, id, value);
