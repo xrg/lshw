@@ -1,13 +1,15 @@
-%define name lshw
-%define version 2.15
+%define git_repo lshw
+%define git_head HEAD
+
 %define realversion B.0%{version}
-%define release %mkrel 1
 
 Summary: A hardware lister
-Name: %{name}
-Version: %{version}
-Release: %{release}
-Source0: http://ezix.sourceforge.net/software/files/%{name}-%{realversion}.tar.gz
+Name:		lshw
+Version:	%git_get_ver
+Release:	%mkrel %git_get_rel2
+Source:		%git_bs_source %{name}-%{version}.tar.gz
+Source1:	%{name}-gitrpm.version
+Source2:	%{name}-changelog.gitrpm.txt
 License: GPLv2
 Group: System/Kernel and hardware
 Url: http://ezix.sourceforge.net/software/lshw.html
@@ -29,7 +31,8 @@ BuildRequires: gtk2-devel
 This package provides a graphical user interface to lshw
 
 %prep
-%setup -q -n %{name}-%{realversion}
+%git_get_source
+%setup -q
 # Ugly since 2.07 default rights are messed
 find -type f | xargs chmod 644
 find -type d | xargs chmod 755
