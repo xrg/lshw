@@ -66,6 +66,7 @@ rm -rf $RPM_BUILD_ROOT
 %doc COPYING
 %{_sbindir}/gtk-lshw
 %{_datadir}/lshw/artwork
+%{_datadir}/lshw/ui
 
 
 
